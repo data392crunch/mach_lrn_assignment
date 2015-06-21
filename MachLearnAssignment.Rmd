@@ -1,0 +1,120 @@
+---
+title: "Qualitative Activity Recognition for a Weight Exercise"
+author: "pinkscissors"
+date: "15 June 2015"
+output: html_document
+---
+
+### SUMMARY
+
+#### Sources
+We acknowledge the source of the study material and its data from:  
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz3d9Kb1ffF
+
+#### Goal of this assignment
+The goal was to develop a suitable model for predicting the quality of the performance of an activity. The data for the study was generated from movement sensors worn by exercise participants whilst they were performing an exercise known as "Unilateral Dumbbell Biceps Curl". A training set was provided from which to derive the prediction model together with a test set to use for predicting the its data classifications.
+
+#### Procedures and Results
+The training data set was analysed and was found to contain numerous columns of missing values. These, together with other apparently unnecessary data columns were removed from the data before attempting to create a predictive model. Running an "rpart" model produced a tree which split the data mostly according to row number. This showed that the removal of the first or "X"-named column was necessary.
+
+Due to the better accuracy of the randomForest model, this was attempted on the full 19622 rows of training data, but it took hours and hours to run. I aborted the runs before they completed, and checked the tips given in the discussion forums. They showed that it was possible to get a good model result using only 10% of the training set. I decided to use 20% and held out the 80% balance to use for validation purposes.
+
+My pruned set ran in about 17 minutes and gave me an error rate of only 2.6%, so I was content with that. I then checked the model on the 80% balance of the training set, and this validation gave the model an accuracy of approx 97%. I thus felt that a usable model had been achieved. I used this model for the second part of the assignment.
+
+### Exploratory Data Analysis
+Loaded the training dataset and looked at its structure.
+
+```{r, echo=FALSE, message=FALSE, cache=TRUE}
+library(caret)
+library(randomForest)
+library(rpart)
+library(klaR)
+library(MASS)
+
+```
+
+```{r, cache=TRUE}
+train_in<- read.csv("pml-training.csv", header=TRUE, stringsAsFactors = TRUE)
+test_in<-read.csv("pml-testing.csv", header=TRUE, stringsAsFactors = TRUE)
+
+#Look at structures
+dim(train_in); dim(test_in)
+
+```
+
+```{r, eval=FALSE}
+tr_str<- str(train_in)
+tr_summy<- summary(train_in)
+
+```
+
+### Cleaning the Data
+The summary and str(ucture) commands showed all rows had NA's in them. Usually one removes these rows, but here we would then have no dataset to work with. However, it was seen in the summary print that the NA's were a columnwise phenomenon. These columns did not look like they contained values qualifying exercise movements to help build the model, so I felt that they could be removed.
+
+I tried to run the "rpart" model on the 19622 rows of training data and found that it was simply splitting the data based on the row number "X". This column also needed removing.
+
+Also, in the discussion forum, in entries given as "tips" for the assignment, people were saying that the columns giving dates, times and windows etc. could be removed. I also did the column removal on the test set for the sake of consistency, but apparently this was not necessary, as models predict outcomes based on the training set variables.
+
+
+```{r}
+#Reduce for NA columns and measurement factor columns
+train_prun<- train_in[,-c(1:7,12:36,50:59,69:83,87:101,103:112,125:139,141:150)]
+test_prun<- test_in[,-c(1:7,12:36,50:59,69:83,87:101,103:112,125:139,141:150)]
+dim(train_prun)
+
+```
+
+### Choosing the Prediction Model and Splitting the Training Data
+So we had now reduced the variables from 160 to 53. For a next choice of model algorithm, I felt that randomForest, being very accurate, would be the most suitable for the predictions on the test set. The first run using the default settings took hours too long, so something else had to be tried. Again, the discussion forum came to my rescue.
+
+Some people were reporting that they were able to generate accurate predicting models using only 10% of the training set. I therefor decided to be a little more conservative and used 20% to train my model. This left 80% of the training set to be used for validating the model generated. Using my reduced training set, it took about 17 minutes to run each time. I was happy with this.
+
+
+```{r}
+#Split training into smaller training size (20%)
+set.seed(1491)
+train_prun_sub<- createDataPartition(y=train_prun$classe, p=0.2, list=FALSE)
+train_sub<- train_prun[train_prun_sub,]
+#Make the balance of the training set a validation set 
+validate_sub<- train_prun[-train_prun_sub,]
+dim(train_sub)
+dim(validate_sub)
+
+```
+
+### Finally Creating the Model
+Running to create the randomForest model on 20% of the training set.
+
+```{r, cache=TRUE }
+#Create model using rf (randomForest)
+system.time(modrf<- train(classe ~ ., method="rf", data=train_sub),gcFirst=TRUE)
+
+```
+
+Printing out the results on the 20% of the training set.
+
+
+```{r}
+print(modrf$finalModel)
+
+```
+
+The model results showed a completed confusion matrix and an overall error rate of 2.57%, which then needed to be tested on the 80% remainder of the training set.
+
+### Validating the Model
+The validation on the 80% balance of the training data:
+
+```{r}
+#Validate model with held out balance of training data
+#Make predictions with the model
+pred_on_val<-predict(modrf, newdata = validate_sub)
+#Check predictions against the actual outcomes
+confusionMatrix(pred_on_val, validate_sub$classe)
+
+```
+
+The validation of the model thus showed an accuracy of its prediction of just under 97%. This seemed accurate enough to do the predictions on the test set of 20 data items.
+
+***********************
